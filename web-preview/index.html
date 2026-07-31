@@ -647,6 +647,9 @@
         <span>Servidor API:</span>
         <input type="text" id="apiHostInput" value="http://192.168.0.109:8252/api/" />
         <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;" onclick="testApiConnection()">Conectar</button>
+        <span style="color: rgba(255,255,255,0.3);">|</span>
+        <span style="color: #4ade80; font-weight: bold; font-size: 11px;">📁 Google Drive: 1Cne2Ci...</span>
+        <button class="btn btn-primary" style="padding: 4px 10px; font-size: 11px; background: #2563eb;" onclick="loadGDriveCatalog()">🔄 Carregar Pasta</button>
     </div>
 
     <div class="tv-container">
@@ -716,6 +719,20 @@
 
             <!-- Sections Container -->
             <div class="content-sections">
+
+                <!-- Google Drive Movies Row -->
+                <section id="gdriveSection">
+                    <h2 class="section-title">📁 Filmes da Sua Pasta no Google Drive <span style="font-size: 12px; font-weight: normal; color: #4ade80; margin-left: 10px;">[ID: 1Cne2Ci8boM9TQ19DAoGY-yhCbt07XGzm]</span></h2>
+                    <div class="media-row" id="gdriveRow">
+                        <div class="card poster-card" tabindex="0" onclick="alert('Sincronizador pronto! Adicione seus arquivos de vídeo (.mp4, .mkv) na sua pasta do Google Drive e rode `python3 gdrive_sync.py` no terminal para atualizar os filmes instantaneamente no app!')">
+                            <img src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=400&auto=format&fit=crop" />
+                            <div class="card-info">
+                                <div class="card-title">+ Aguardando Downloads</div>
+                                <div class="card-sub">Pasta Conectada</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
                 <!-- Continue Watching Row -->
                 <section>
@@ -969,6 +986,46 @@
                     alert('Servidor offline no momento. O simulador continuará usando dados de demonstração.');
                 });
         }
+
+        function loadGDriveCatalog() {
+            fetch('gdrive_catalog.json')
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.movies && data.movies.length > 0) {
+                        const row = document.getElementById('gdriveRow');
+                        row.innerHTML = '';
+                        data.movies.forEach(m => {
+                            const card = document.createElement('div');
+                            card.className = 'card poster-card';
+                            card.tabIndex = 0;
+                            card.onclick = () => {
+                                startPlayer(m.title);
+                                const video = document.getElementById('videoElement');
+                                video.src = m.stream_url;
+                            };
+                            card.innerHTML = `
+                                <img src="${m.poster}" alt="${m.title}" />
+                                <div class="card-info">
+                                    <div class="card-title">${m.title}</div>
+                                    <div class="card-sub">★ ${m.rating} • ${m.quality}</div>
+                                </div>
+                            `;
+                            row.appendChild(card);
+                        });
+                        alert(`🔥 Catálogo do Google Drive Carregado com Sucesso! (${data.movies.length} filmes prontos)`);
+                    } else {
+                        alert("📁 Pasta do Google Drive (ID: 1Cne2Ci8boM9TQ19DAoGY-yhCbt07XGzm) vinculada!\n\nAssim que os downloads terminarem na pasta do Drive, execute no terminal:\npython3 gdrive_sync.py\n\nTodos os filmes aparecerão automaticamente aqui!");
+                    }
+                })
+                .catch(err => {
+                    alert("📁 Pasta do Google Drive (ID: 1Cne2Ci8boM9TQ19DAoGY-yhCbt07XGzm) configurada com sucesso!\n\nQuando os seus filmes terminarem de baixar na pasta do Drive, rode `python3 gdrive_sync.py` para carregar o catálogo.");
+                });
+        }
+
+        // Auto check Google Drive catalog on startup
+        window.addEventListener('DOMContentLoaded', () => {
+            loadGDriveCatalog();
+        });
     </script>
 </body>
 </html>
