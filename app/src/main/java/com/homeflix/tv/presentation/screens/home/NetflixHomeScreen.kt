@@ -220,6 +220,17 @@ fun NetflixHomeScreen(
                         val top10Index = featuredIndex + (if (hasFeatured) 1 else 0)
                         val trendingIndex = top10Index + (if (hasTop10) 1 else 0)
 
+                        val onNavigateLeftToSideNav: () -> Unit = {
+                            coroutineScope.launch {
+                                try {
+                                    sideNavFocusRequester.requestFocus()
+                                    currentFocusArea = FocusArea.SIDEBAR
+                                } catch (e: Exception) {
+                                    android.util.Log.w("HomeScreen", "Failed to focus sidebar", e)
+                                }
+                            }
+                        }
+
                         val navUpTo: (Int, FocusRequester) -> Unit = { itemIndex, requester ->
                             coroutineScope.launch {
                                 listState.animateScrollToItem(itemIndex)
@@ -283,7 +294,8 @@ fun NetflixHomeScreen(
                                             } catch (e: Exception) {
                                                 // Ignore focus errors
                                             }
-                                        }
+                                        },
+                                        onNavigateLeft = onNavigateLeftToSideNav
                                     )
                                 }
                             }
@@ -373,6 +385,7 @@ fun NetflixHomeScreen(
                                     },
                                     focusRequester = actionFocusRequester,
                                     onNavigateUp = upFromAction,
+                                    onNavigateLeft = onNavigateLeftToSideNav,
                                     modifier = Modifier.padding(bottom = 24.dp)
                                 )
                             }

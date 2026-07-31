@@ -57,122 +57,87 @@ class HomeViewModel @Inject constructor(
                     _uiState.value = HomeUiState.Loading
                 }
                 
-                // Load movies content first
-                mediaRepository.getMovies(limit = 100).collect { result ->
-                    result.fold(
-                        onSuccess = { movies ->
-                            if (movies.isEmpty()) {
-                                _uiState.value = HomeUiState.Error("No movies available in database")
-                                return@collect
+                // Load movies content with strict 4-second max timeout for network startup
+                val success = kotlinx.coroutines.withTimeoutOrNull(4000) {
+                    var loaded = false
+                    mediaRepository.getMovies(limit = 100).collect { result ->
+                        result.fold(
+                            onSuccess = { movies ->
+                                if (movies.isNotEmpty()) {
+                                    loaded = true
+                                    // Sort by creation date for latest content
+                                    val sortedByDate = movies.sortedByDescending { 
+                                        it.createdAt?.time ?: it.id.toLong()
+                                    }
+                                    val sortedByViews = movies.sortedByDescending { it.viewCount }
+                                    val sortedByRating = movies.sortedByDescending { it.rating }
+                                    
+                                    val featuredMedia = sortedByDate.take(8)
+                                    
+                                    val trendingMovies = try {
+                                        val trendingResponse = mediaRepository.getTrendingRecommendations(20)
+                                        if (trendingResponse.isSuccessful) {
+                                            trendingResponse.body()?.map { it.toDomain() } ?: sortedByRating.take(20)
+                                        } else sortedByRating.take(20)
+                                    } catch (e: Exception) {
+                                        sortedByRating.take(20)
+                                    }
+                                    
+                                    val popularMovies = movies
+                                        .sortedWith(
+                                            compareByDescending<Media> { it.viewCount }
+                                                .thenByDescending { it.rating }
+                                                .thenBy { it.id }
+                                        )
+                                        .take(20)
+                                    
+                                    val latestMovies = sortedByDate.take(20)
+                                    
+                                    val actionMovies = sortedByDate.filter { m -> m.genres.any { it.name.contains("Action", ignoreCase = true) } }.take(15)
+                                    val dramaMovies = sortedByDate.filter { m -> m.genres.any { it.name.contains("Drama", ignoreCase = true) } }.take(15)
+                                    val sciFiMovies = sortedByDate.filter { m -> m.genres.any { it.name.contains("Science Fiction", ignoreCase = true) || it.name.contains("Sci-Fi", ignoreCase = true) } }.take(15)
+                                    
+                                    viewModelScope.launch {
+                                        com.homeflix.tv.data.persistence.ContentCache.saveMediaList(context, "movies", movies)
+                                    }
+                                    
+                                    val continueWatchingItems = fetchContinueWatching()
+                                    
+                                    _uiState.value = HomeUiState.Success(
+                                        featuredMedia = featuredMedia,
+                                        continueWatching = continueWatchingItems,
+                                        trendingMovies = trendingMovies,
+                                        popularMovies = popularMovies,
+                                        latestMovies = latestMovies,
+                                        actionMovies = actionMovies,
+                                        comedyMovies = sortedByDate.filter { media -> media.genres.any { genre -> genre.name.contains("Comedy", ignoreCase = true) } }.take(15),
+                                        dramaMovies = dramaMovies,
+                                        sciFiMovies = sciFiMovies,
+                                        horrorMovies = sortedByDate.filter { media -> media.genres.any { genre -> genre.name.contains("Horror", ignoreCase = true) } }.take(15),
+                                        romanceMovies = sortedByDate.filter { media -> media.genres.any { genre -> genre.name.contains("Romance", ignoreCase = true) } }.take(15),
+                                        thrillerMovies = sortedByDate.filter { media -> media.genres.any { genre -> genre.name.contains("Thriller", ignoreCase = true) } }.take(15),
+                                        currentHeroIndex = 0,
+                                        trending = trendingMovies,
+                                        popularTVShows = emptyList(),
+                                        recentlyAdded = latestMovies,
+                                        recommended = latestMovies.take(10)
+                                    )
+                                }
+                            },
+                            onFailure = { error ->
+                                Log.w("HomeViewModel", "API connection failed, falling back to standalone catalog: ${error.message}")
                             }
-                            
-                            // EXACTLY like web app: Sort by creation date for latest content
-                            val sortedByDate = movies.sortedByDescending { 
-                                it.createdAt?.time ?: it.id.toLong() // Use creation date or ID as fallback
-                            }
-                            
-                            // Sort by view count for popular content
-                            val sortedByViews = movies.sortedByDescending { it.viewCount }
-                            
-                            // Sort by rating for trending content  
-                            val sortedByRating = movies.sortedByDescending { it.rating }
-                            
-                            // ALWAYS show latest content in hero slider (like browse screen)
-                            val featuredMedia = sortedByDate.take(8) // Top 8 latest movies for hero slider
-                            
-                            // Fetch trending from dedicated API endpoint
-                            val trendingMovies = try {
-                                val trendingResponse = mediaRepository.getTrendingRecommendations(20)
-                                if (trendingResponse.isSuccessful) {
-                                    trendingResponse.body()?.map { it.toDomain() } ?: sortedByRating.take(20)
-                                } else sortedByRating.take(20)
-                            } catch (e: Exception) {
-                                Log.w("HomeViewModel", "Trending API failed, using fallback", e)
-                                sortedByRating.take(20)
-                            }
-                            
-                            // TOP 10: deterministic most-watched ranking. The
-                            // /recommendations/popular endpoint returns a RANDOM
-                            // order on every call, which made Top 10 reshuffle on
-                            // each visit — rank by view count (stable tie-breaks).
-                            val popularMovies = movies
-                                .sortedWith(
-                                    compareByDescending<Media> { it.viewCount }
-                                        .thenByDescending { it.rating }
-                                        .thenBy { it.id }
-                                )
-                                .take(20)
-                            
-                            val latestMovies = sortedByDate.take(20) // Latest by creation date
-                            
-                            // Fetch genre rows from dedicated API endpoints
-                            val actionMovies = try {
-                                val r = mediaRepository.getMediaByGenre("action", 15, 0)
-                                var result = emptyList<Media>()
-                                r.collect { res -> if (res.isSuccess) result = res.getOrNull() ?: emptyList() }
-                                result.ifEmpty { sortedByDate.filter { m -> m.genres.any { it.name.contains("Action", ignoreCase = true) } }.take(15) }
-                            } catch (e: Exception) {
-                                sortedByDate.filter { m -> m.genres.any { it.name.contains("Action", ignoreCase = true) } }.take(15)
-                            }
-                            
-                            val dramaMovies = try {
-                                val r = mediaRepository.getMediaByGenre("drama", 15, 0)
-                                var result = emptyList<Media>()
-                                r.collect { res -> if (res.isSuccess) result = res.getOrNull() ?: emptyList() }
-                                result.ifEmpty { sortedByDate.filter { m -> m.genres.any { it.name.contains("Drama", ignoreCase = true) } }.take(15) }
-                            } catch (e: Exception) {
-                                sortedByDate.filter { m -> m.genres.any { it.name.contains("Drama", ignoreCase = true) } }.take(15)
-                            }
-                            
-                            val sciFiMovies = try {
-                                val r = mediaRepository.getMediaByGenre("sci-fi", 15, 0)
-                                var result = emptyList<Media>()
-                                r.collect { res -> if (res.isSuccess) result = res.getOrNull() ?: emptyList() }
-                                result.ifEmpty { sortedByDate.filter { m -> m.genres.any { it.name.contains("Science Fiction", ignoreCase = true) || it.name.contains("Sci-Fi", ignoreCase = true) } }.take(15) }
-                            } catch (e: Exception) {
-                                sortedByDate.filter { m -> m.genres.any { it.name.contains("Science Fiction", ignoreCase = true) || it.name.contains("Sci-Fi", ignoreCase = true) } }.take(15)
-                            }
-                            
-                            // Cache the movies for next time
-                            viewModelScope.launch {
-                                com.homeflix.tv.data.persistence.ContentCache.saveMediaList(context, "movies", movies)
-                            }
-                            
-                            // Load recently watched data BEFORE updating UI
-                            val continueWatchingItems = fetchContinueWatching()
-                            
-                            // Update UI with ALL data loaded (movies + recently watched)
-                            _uiState.value = HomeUiState.Success(
-                                featuredMedia = featuredMedia, // ALWAYS latest content for hero slider
-                                continueWatching = continueWatchingItems, // Loaded synchronously
-                                trendingMovies = trendingMovies,
-                                popularMovies = popularMovies,
-                                latestMovies = latestMovies,
-                                actionMovies = actionMovies,
-                                comedyMovies = sortedByDate.filter { media -> media.genres.any { genre -> genre.name.contains("Comedy", ignoreCase = true) } }.take(15),
-                                dramaMovies = dramaMovies,
-                                sciFiMovies = sciFiMovies,
-                                horrorMovies = sortedByDate.filter { media -> media.genres.any { genre -> genre.name.contains("Horror", ignoreCase = true) } }.take(15),
-                                romanceMovies = sortedByDate.filter { media -> media.genres.any { genre -> genre.name.contains("Romance", ignoreCase = true) } }.take(15),
-                                thrillerMovies = sortedByDate.filter { media -> media.genres.any { genre -> genre.name.contains("Thriller", ignoreCase = true) } }.take(15),
-                                currentHeroIndex = 0,
-                                // Additional properties for NetflixHomeScreen
-                                trending = trendingMovies,
-                                popularTVShows = emptyList(), // No TV shows in this movie-focused app
-                                recentlyAdded = latestMovies,
-                                recommended = latestMovies.take(10) // Use latest movies as recommendations
-                            )
-                        },
-                        onFailure = { error ->
-                            Log.w("HomeViewModel", "API connection failed, falling back to standalone Google Drive catalog: ${error.message}")
-                            if (_uiState.value !is HomeUiState.Success) {
-                                displayCachedContent(getStandaloneFallbackMovies())
-                            }
-                        }
-                    )
+                        )
+                    }
+                    loaded
+                }
+
+                if (success != true && _uiState.value !is HomeUiState.Success) {
+                    Log.w("HomeViewModel", "API load timed out or failed (4s max), displaying standalone Google Drive catalog")
+                    displayCachedContent(getStandaloneFallbackMovies())
                 }
             } catch (e: Exception) {
-                Log.w("HomeViewModel", "Exception loading home content, falling back to standalone Google Drive catalog: ${e.message}")
+                Log.w("HomeViewModel", "Exception loading home content, falling back to standalone catalog: ${e.message}")
                 if (_uiState.value !is HomeUiState.Success) {
                     displayCachedContent(getStandaloneFallbackMovies())
                 }

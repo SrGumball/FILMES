@@ -25,7 +25,8 @@ fun MediaRow(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
     onNavigateUp: (() -> Unit)? = null,
-    onNavigateDown: (() -> Unit)? = null
+    onNavigateDown: (() -> Unit)? = null,
+    onNavigateLeft: (() -> Unit)? = null
 ) {
     // Professional focus state management
     val listState = rememberLazyListState()
@@ -111,7 +112,7 @@ fun MediaRow(
                                         }
                                     }
                                     Key.DirectionLeft -> {
-                                        // Navigate to previous item in row, or let focus escape to sidebar if at first item
+                                        // Navigate to previous item in row, or trigger onNavigateLeft to sidebar if at first item
                                         if (index > 0) {
                                             val prevIndex = index - 1
                                             if (prevIndex < itemFocusRequesters.size) {
@@ -119,8 +120,12 @@ fun MediaRow(
                                             }
                                             true // Consume event
                                         } else {
-                                            // At first item - let focus system handle (allows navigation to sidebar)
-                                            false
+                                            if (onNavigateLeft != null) {
+                                                onNavigateLeft.invoke()
+                                                true
+                                            } else {
+                                                false
+                                            }
                                         }
                                     }
                                     Key.DirectionRight -> {

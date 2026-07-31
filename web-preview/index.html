@@ -981,19 +981,46 @@
                 return;
             }
 
-            let currentIndex = elements.indexOf(current);
-            let nextIndex = currentIndex;
+            const currentRect = current.getBoundingClientRect();
+            const currentCenterX = currentRect.left + currentRect.width / 2;
+            const currentCenterY = currentRect.top + currentRect.height / 2;
 
-            if (direction === 'Right') nextIndex = Math.min(currentIndex + 1, elements.length - 1);
-            if (direction === 'Left') nextIndex = Math.max(currentIndex - 1, 0);
-            if (direction === 'Down') nextIndex = Math.min(currentIndex + 3, elements.length - 1);
-            if (direction === 'Up') nextIndex = Math.max(currentIndex - 3, 0);
+            let bestCandidate = null;
+            let bestDistance = Infinity;
 
-            if (elements[nextIndex]) {
+            elements.forEach(el => {
+                if (el === current) return;
+                const rect = el.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+
+                let isValidDirection = false;
+                if (direction === 'Right') isValidDirection = rect.left >= currentRect.right - 15;
+                else if (direction === 'Left') isValidDirection = rect.right <= currentRect.left + 15;
+                else if (direction === 'Down') isValidDirection = rect.top >= currentRect.bottom - 15;
+                else if (direction === 'Up') isValidDirection = rect.bottom <= currentRect.top + 15;
+
+                if (isValidDirection) {
+                    const dx = centerX - currentCenterX;
+                    const dy = centerY - currentCenterY;
+                    const distance = Math.hypot(dx, dy);
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        bestCandidate = el;
+                    }
+                }
+            });
+
+            // Guaranteed Sidebar access when pressing LEFT from leftmost cards/hero
+            if (!bestCandidate && direction === 'Left') {
+                bestCandidate = document.querySelector('.nav-item.active') || document.querySelector('.nav-item');
+            }
+
+            if (bestCandidate) {
                 elements.forEach(el => el.classList.remove('focused'));
-                elements[nextIndex].classList.add('focused');
-                elements[nextIndex].focus();
-                elements[nextIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                bestCandidate.classList.add('focused');
+                bestCandidate.focus();
+                bestCandidate.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
             }
         }
 
@@ -1020,12 +1047,14 @@
             iframe.style.display = 'none';
             iframe.src = '';
 
-            if (fileId || (streamUrl && streamUrl.includes('drive.google.com'))) {
+            const fallbackMp4 = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4";
+
+            if (fileId || (streamUrl && (streamUrl.includes('drive.google.com') || streamUrl.length === 33))) {
                 const match = streamUrl.match(/id=([a-zA-Z0-9_-]+)/) || streamUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
-                const gId = fileId || (match ? match[1] : '');
+                const gId = fileId || (match ? match[1] : (streamUrl.length === 33 ? streamUrl : '1BSL7vK9gy6t3MNo6tJN-npI9nghaFBvl'));
 
                 if (gId) {
-                    // Try HTML5 video direct stream, fallback to Drive Embed iframe if blocked
+                    console.log("Loading Google Drive media ID:", gId);
                     video.src = `https://drive.google.com/uc?export=download&id=${gId}`;
                     video.muted = false;
                     
@@ -1034,22 +1063,30 @@
                         video.style.display = 'none';
                         iframe.style.display = 'block';
                         iframe.src = `https://drive.google.com/file/d/${gId}/preview`;
-                    }, 2500);
+                    }, 1500);
 
                     video.onplaying = () => clearTimeout(videoTimeout);
                     video.onerror = () => {
                         clearTimeout(videoTimeout);
-                        video.style.display = 'none';
-                        iframe.style.display = 'block';
-                        iframe.src = `https://drive.google.com/file/d/${gId}/preview`;
+                        console.log("HTML5 video blocked/error, using fallback sample video...");
+                        video.src = fallbackMp4;
+                        video.play().catch(() => {
+                            video.style.display = 'none';
+                            iframe.style.display = 'block';
+                            iframe.src = `https://drive.google.com/file/d/${gId}/preview`;
+                        });
                     };
                     video.play().catch(() => {});
                     return;
                 }
             }
 
-            if (streamUrl) video.src = streamUrl;
+            video.src = streamUrl || fallbackMp4;
             video.muted = false;
+            video.onerror = () => {
+                video.src = fallbackMp4;
+                video.play().catch(() => {});
+            };
             video.play().catch(() => {});
         }
 

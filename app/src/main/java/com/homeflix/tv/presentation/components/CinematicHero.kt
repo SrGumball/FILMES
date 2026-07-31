@@ -57,7 +57,8 @@ fun CinematicHero(
     onIndexChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
     playButtonFocusRequester: FocusRequester? = null,
-    onNavigateDown: (() -> Unit)? = null
+    onNavigateDown: (() -> Unit)? = null,
+    onNavigateLeft: (() -> Unit)? = null
 ) {
     if (mediaList.isEmpty()) return
     val safeIndex = currentIndex.coerceIn(0, mediaList.size - 1)
@@ -235,9 +236,7 @@ fun CinematicHero(
                     focusRequester = playButtonFocusRequester,
                     onClick = { onPlayClick(currentMedia) },
                     onNavigateDown = onNavigateDown,
-                    onNavigateLeft = {
-                        if (mediaList.size > 1) onIndexChange(if (safeIndex > 0) safeIndex - 1 else mediaList.size - 1)
-                    },
+                    onNavigateLeft = onNavigateLeft,
                     onNavigateRight = null
                 )
                 HeroActionButton(
