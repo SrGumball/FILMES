@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- HomeFlix mark: bold red "H" with a play triangle in the gap -->
+    <!-- Left leg -->
+    <path
+        android:fillColor="#E50914"
+        android:pathData="M37,33 h9 v42 h-9 z" />
+    <!-- Right leg -->
+    <path
+        android:fillColor="#E50914"
+        android:pathData="M62,33 h9 v42 h-9 z" />
+    <!-- Play triangle (crossbar) -->
+    <path
+        android:fillColor="#E50914"
+        android:pathData="M48,43 L48,65 L64,54 Z" />
+</vector>
