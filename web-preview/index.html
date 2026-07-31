@@ -857,11 +857,12 @@
 
     <!-- Custom Player View Simulator -->
     <div class="player-view" id="playerView">
-        <video class="player-video" id="videoElement" autoplay loop muted>
+        <video class="player-video" id="videoElement" autoplay loop muted style="width: 100%; height: 100%; object-fit: contain;">
             <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4" type="video/mp4">
         </video>
+        <iframe id="iframePlayer" style="width: 100%; height: 100%; border: none; display: none; position: absolute; inset: 0; z-index: 1;" allow="autoplay; fullscreen"></iframe>
         
-        <div class="player-controls">
+        <div class="player-controls" style="z-index: 10;">
             <div>
                 <button class="btn btn-secondary" onclick="closePlayer()">← Sair do Player</button>
             </div>
@@ -1002,10 +1003,49 @@
             document.getElementById('detailsModal').classList.remove('active');
         }
 
-        function startPlayer(title = 'Filme HomeFlix') {
+        let customMoviesStore = JSON.parse(localStorage.getItem('homeflix_custom_movies') || '[]');
+
+        function startPlayer(title = 'Filme HomeFlix', streamUrl = '', fileId = '') {
             document.getElementById('playerMediaTitle').innerText = title;
             document.getElementById('playerView').classList.add('active');
+            
             const video = document.getElementById('videoElement');
+            const iframe = document.getElementById('iframePlayer');
+            
+            // Reset visibility
+            video.style.display = 'block';
+            iframe.style.display = 'none';
+            iframe.src = '';
+
+            if (fileId || (streamUrl && streamUrl.includes('drive.google.com'))) {
+                const match = streamUrl.match(/id=([a-zA-Z0-9_-]+)/) || streamUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                const gId = fileId || (match ? match[1] : '');
+
+                if (gId) {
+                    // Try HTML5 video direct stream, fallback to Drive Embed iframe if blocked
+                    video.src = `https://drive.google.com/uc?export=download&id=${gId}`;
+                    video.muted = false;
+                    
+                    let videoTimeout = setTimeout(() => {
+                        console.log("Switching to Google Drive Embed iframe player...");
+                        video.style.display = 'none';
+                        iframe.style.display = 'block';
+                        iframe.src = `https://drive.google.com/file/d/${gId}/preview`;
+                    }, 2500);
+
+                    video.onplaying = () => clearTimeout(videoTimeout);
+                    video.onerror = () => {
+                        clearTimeout(videoTimeout);
+                        video.style.display = 'none';
+                        iframe.style.display = 'block';
+                        iframe.src = `https://drive.google.com/file/d/${gId}/preview`;
+                    };
+                    video.play().catch(() => {});
+                    return;
+                }
+            }
+
+            if (streamUrl) video.src = streamUrl;
             video.muted = false;
             video.play().catch(() => {});
         }
@@ -1013,7 +1053,9 @@
         function closePlayer() {
             document.getElementById('playerView').classList.remove('active');
             const video = document.getElementById('videoElement');
+            const iframe = document.getElementById('iframePlayer');
             video.pause();
+            iframe.src = '';
         }
 
         function togglePlayPause() {
@@ -1038,30 +1080,45 @@
             fetch('gdrive_catalog.json')
                 .then(res => res.json())
                 .then(data => {
-                    if (data && data.movies && data.movies.length > 0) {
-                        renderDriveMovies(data.movies);
-                    }
+                    let allMovies = (data && data.movies) ? data.movies : [];
+                    // Merge with custom saved movies from localStorage
+                    const combined = [...customMoviesStore, ...allMovies];
+                    renderDriveMovies(combined);
                 })
-                .catch(() => {});
+                .catch(() => {
+                    renderDriveMovies(customMoviesStore);
+                });
         }
 
         function renderDriveMovies(movies) {
             const row = document.getElementById('gdriveRow');
             row.innerHTML = '';
+            
+            if (!movies || movies.length === 0) {
+                row.innerHTML = `
+                    <div class="card poster-card" onclick="openDriveModal()" tabindex="0">
+                        <div style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); text-align: center; padding: 15px;">
+                            <div style="font-size: 32px; margin-bottom: 8px;">➕</div>
+                            <div style="font-weight: 700; font-size: 13px;">Adicionar Filme</div>
+                            <div style="font-size: 11px; color: #888;">Cole o link do Drive</div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
             movies.forEach(m => {
                 const card = document.createElement('div');
                 card.className = 'card poster-card';
                 card.tabIndex = 0;
                 card.onclick = () => {
-                    startPlayer(m.title);
-                    const video = document.getElementById('videoElement');
-                    video.src = m.stream_url;
+                    startPlayer(m.title, m.stream_url, m.id);
                 };
                 card.innerHTML = `
                     <img src="${m.poster || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=400&auto=format&fit=crop'}" alt="${m.title}" />
                     <div class="card-info">
                         <div class="card-title">${m.title}</div>
-                        <div class="card-sub">★ ${m.rating || '9.0'} • ${m.quality || '4K'}</div>
+                        <div class="card-sub">★ ${m.rating || '9.5'} • ${m.quality || '4K'}</div>
                     </div>
                 `;
                 row.appendChild(card);
@@ -1104,13 +1161,19 @@
                 title: title,
                 stream_url: `https://drive.google.com/uc?export=download&id=${fileId}`,
                 poster: poster,
-                rating: 9.5,
+                rating: 9.8,
                 quality: '4K ULTRA HD'
             };
 
-            renderDriveMovies([newMovie]);
+            // Save into persistent customMoviesStore in localStorage
+            customMoviesStore.unshift(newMovie);
+            localStorage.setItem('homeflix_custom_movies', JSON.stringify(customMoviesStore));
+
+            loadGDriveCatalog();
             closeDriveModal();
-            alert(`✅ Filme "${title}" adicionado ao simulador com sucesso!\nClique no card dele para reproduzir.`);
+            
+            // Auto play added movie
+            startPlayer(newMovie.title, newMovie.stream_url, newMovie.id);
         }
 
         // Tab Navigation Event Handlers
