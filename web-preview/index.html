@@ -930,8 +930,11 @@
                     <button class="btn btn-primary" onclick="submitCustomMovie()" style="flex: 1; justify-content: center; background: #2563eb;">
                         ▶ Adicionar Filme & Assistir
                     </button>
+                    <button class="btn btn-secondary" onclick="clearCustomMovies()" style="justify-content: center; background: #dc2626; color: #FFF;">
+                        🗑️ Limpar Adicionados
+                    </button>
                     <button class="btn btn-secondary" onclick="loadGDriveCatalog()" style="justify-content: center;">
-                        🔄 Re-Sincronizar Pasta
+                        🔄 Re-Sincronizar
                     </button>
                 </div>
             </div>
@@ -1174,6 +1177,15 @@
             
             // Auto play added movie
             startPlayer(newMovie.title, newMovie.stream_url, newMovie.id);
+        }
+
+        function clearCustomMovies() {
+            if (confirm("Deseja remover todos os filmes adicionados manualmente?")) {
+                customMoviesStore = [];
+                localStorage.removeItem('homeflix_custom_movies');
+                loadGDriveCatalog();
+                closeDriveModal();
+            }
         }
 
         // Tab Navigation Event Handlers
