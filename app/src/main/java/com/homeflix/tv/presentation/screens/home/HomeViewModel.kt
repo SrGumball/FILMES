@@ -164,38 +164,18 @@ class HomeViewModel @Inject constructor(
                             )
                         },
                         onFailure = { error ->
-                            Log.e("HomeViewModel", "Error loading movies", error)
-                            // Cached content already on screen? Keep it - a failed
-                            // background refresh must never blank a working UI.
-                            if (_uiState.value is HomeUiState.Success) {
-                                return@fold
+                            Log.w("HomeViewModel", "API connection failed, falling back to standalone Google Drive catalog: ${error.message}")
+                            if (_uiState.value !is HomeUiState.Success) {
+                                displayCachedContent(getStandaloneFallbackMovies())
                             }
-                            val errorMessage = when {
-                                error.message?.contains("ConnectException") == true -> "Cannot connect to server at ${BuildConfig.BASE_URL}. Check if server is running and TV is on same network."
-                                error.message?.contains("UnknownHostException") == true -> "Server not found at ${BuildConfig.BASE_URL}. Check network connection and server IP."
-                                error.message?.contains("SocketTimeoutException") == true -> "Server timeout at ${BuildConfig.BASE_URL}. Server may be down or slow."
-                                error.message?.contains("404") == true -> "API endpoints not found on server at ${BuildConfig.BASE_URL}"
-                                error.message?.contains("cleartext") == true -> "HTTP cleartext not allowed. Check network security config."
-                                else -> "Error connecting to ${BuildConfig.BASE_URL}: ${error.message ?: "Unknown error occurred"}"
-                            }
-                            _uiState.value = HomeUiState.Error(errorMessage)
                         }
                     )
                 }
             } catch (e: Exception) {
-                Log.e("HomeViewModel", "Error loading home content", e)
-                if (_uiState.value is HomeUiState.Success) {
-                    return@launch // keep cached UI on background-refresh failure
+                Log.w("HomeViewModel", "Exception loading home content, falling back to standalone Google Drive catalog: ${e.message}")
+                if (_uiState.value !is HomeUiState.Success) {
+                    displayCachedContent(getStandaloneFallbackMovies())
                 }
-                val errorMessage = when {
-                    e.message?.contains("ConnectException") == true -> "Cannot connect to server at ${BuildConfig.BASE_URL}. Check if server is running and TV is on same network."
-                    e.message?.contains("UnknownHostException") == true -> "Server not found at ${BuildConfig.BASE_URL}. Check network connection and server IP."
-                    e.message?.contains("SocketTimeoutException") == true -> "Server timeout at ${BuildConfig.BASE_URL}. Server may be down or slow."
-                    e.message?.contains("404") == true -> "API endpoints not found on server at ${BuildConfig.BASE_URL}"
-                    e.message?.contains("cleartext") == true -> "HTTP cleartext not allowed. Check network security config."
-                    else -> "Error connecting to ${BuildConfig.BASE_URL}: ${e.message ?: "Unknown error occurred"}"
-                }
-                _uiState.value = HomeUiState.Error(errorMessage)
             }
         }
     }
@@ -515,8 +495,43 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
-    
 
+    private fun getStandaloneFallbackMovies(): List<Media> {
+        return listOf(
+            Media(
+                id = 1,
+                title = "Como Mágica 2026",
+                description = "Filme em 4K Ultra HD diretamente da sua pasta no Google Drive.",
+                streamUrl = "https://drive.google.com/uc?export=download&id=1BSL7vK9gy6t3MNo6tJN-npI9nghaFBvl",
+                posterPath = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=600&auto=format&fit=crop",
+                backdropPath = "https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=1200&auto=format&fit=crop",
+                rating = 9.5,
+                year = 2026,
+                quality = "4K ULTRA HD",
+                type = MediaType.MOVIE,
+                genres = listOf(Genre(1, "Lançamentos"), Genre(2, "4K")),
+                durationSeconds = 7200,
+                viewCount = 1250,
+                createdAt = java.util.Date()
+            ),
+            Media(
+                id = 2,
+                title = "Cyberpunk: Edgerunners",
+                description = "Numa distopia repleta de corrupção e implantes cibernéticos, um jovem tenta sobreviver.",
+                streamUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+                posterPath = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=600&auto=format&fit=crop",
+                backdropPath = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=1200&auto=format&fit=crop",
+                rating = 9.4,
+                year = 2024,
+                quality = "4K ULTRA HD",
+                type = MediaType.MOVIE,
+                genres = listOf(Genre(3, "Ação"), Genre(4, "Ficção")),
+                durationSeconds = 6500,
+                viewCount = 980,
+                createdAt = java.util.Date(System.currentTimeMillis() - 86400000)
+            )
+        )
+    }
 }
 
 sealed class HomeUiState {

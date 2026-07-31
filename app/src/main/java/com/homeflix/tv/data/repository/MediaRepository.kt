@@ -14,6 +14,43 @@ class MediaRepository @Inject constructor(
     private val apiService: HomeFlixApiService
 ) : com.homeflix.tv.domain.repository.MediaRepository {
     
+    private fun getStandaloneFallbackMovies(): List<Media> {
+        return listOf(
+            Media(
+                id = 1,
+                title = "Como Mágica 2026",
+                description = "Filme em 4K Ultra HD diretamente da sua pasta no Google Drive.",
+                streamUrl = "https://drive.google.com/uc?export=download&id=1BSL7vK9gy6t3MNo6tJN-npI9nghaFBvl",
+                posterPath = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=600&auto=format&fit=crop",
+                backdropPath = "https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=1200&auto=format&fit=crop",
+                rating = 9.5,
+                year = 2026,
+                quality = "4K ULTRA HD",
+                type = MediaType.MOVIE,
+                genres = listOf(Genre(1, "Lançamentos"), Genre(2, "4K")),
+                durationSeconds = 7200,
+                viewCount = 1250,
+                createdAt = java.util.Date()
+            ),
+            Media(
+                id = 2,
+                title = "Cyberpunk: Edgerunners",
+                description = "Numa distopia repleta de corrupção e implantes cibernéticos, um jovem tenta sobreviver.",
+                streamUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+                posterPath = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=600&auto=format&fit=crop",
+                backdropPath = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=1200&auto=format&fit=crop",
+                rating = 9.4,
+                year = 2024,
+                quality = "4K ULTRA HD",
+                type = MediaType.MOVIE,
+                genres = listOf(Genre(3, "Ação"), Genre(4, "Ficção")),
+                durationSeconds = 6500,
+                viewCount = 980,
+                createdAt = java.util.Date(System.currentTimeMillis() - 86400000)
+            )
+        )
+    }
+
     override fun getAllMedia(
         limit: Int,
         offset: Int,
@@ -25,14 +62,14 @@ class MediaRepository @Inject constructor(
             if (response.isSuccessful) {
                 val mediaList = response.body()?.map { it.toDomain() } ?: emptyList()
                 Log.d("MediaRepository", "getAllMedia success: ${mediaList.size} items")
-                emit(Result.success(mediaList))
+                emit(Result.success(mediaList.ifEmpty { getStandaloneFallbackMovies() }))
             } else {
-                Log.e("MediaRepository", "getAllMedia failed: ${response.code()} - ${response.message()}")
-                emit(Result.failure(Exception("Failed to fetch media: ${response.code()} ${response.message()}")))
+                Log.w("MediaRepository", "getAllMedia failed, using standalone fallback")
+                emit(Result.success(getStandaloneFallbackMovies()))
             }
         } catch (e: Exception) {
-            Log.e("MediaRepository", "getAllMedia error", e)
-            emit(Result.failure(e))
+            Log.w("MediaRepository", "API offline, using standalone fallback: ${e.message}")
+            emit(Result.success(getStandaloneFallbackMovies()))
         }
     }
     
@@ -42,14 +79,14 @@ class MediaRepository @Inject constructor(
             if (response.isSuccessful) {
                 val movies = response.body()?.map { it.toDomain() } ?: emptyList()
                 Log.d("MediaRepository", "getMovies success: ${movies.size} items")
-                emit(Result.success(movies))
+                emit(Result.success(movies.ifEmpty { getStandaloneFallbackMovies() }))
             } else {
-                Log.e("MediaRepository", "getMovies failed: ${response.code()} - ${response.message()}")
-                emit(Result.failure(Exception("Failed to fetch movies: ${response.code()} ${response.message()}")))
+                Log.w("MediaRepository", "getMovies failed, using standalone fallback")
+                emit(Result.success(getStandaloneFallbackMovies()))
             }
         } catch (e: Exception) {
-            Log.e("MediaRepository", "getMovies error", e)
-            emit(Result.failure(e))
+            Log.w("MediaRepository", "API offline, using standalone fallback: ${e.message}")
+            emit(Result.success(getStandaloneFallbackMovies()))
         }
     }
     
@@ -78,13 +115,17 @@ class MediaRepository @Inject constructor(
                 if (media != null) {
                     emit(Result.success(media))
                 } else {
-                    emit(Result.failure(Exception("Media not found")))
+                    val fallback = getStandaloneFallbackMovies().find { it.id.toString() == id } ?: getStandaloneFallbackMovies().first()
+                    emit(Result.success(fallback))
                 }
             } else {
-                emit(Result.failure(Exception("Failed to fetch media: ${response.message()}")))
+                val fallback = getStandaloneFallbackMovies().find { it.id.toString() == id } ?: getStandaloneFallbackMovies().first()
+                emit(Result.success(fallback))
             }
         } catch (e: Exception) {
-            emit(Result.failure(e))
+            Log.w("MediaRepository", "API offline, using fallback for getMediaById($id)")
+            val fallback = getStandaloneFallbackMovies().find { it.id.toString() == id } ?: getStandaloneFallbackMovies().first()
+            emit(Result.success(fallback))
         }
     }
     
