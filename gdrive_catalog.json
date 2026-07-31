@@ -1,8 +1,23 @@
 {
   "drive_folder_id": "1Cne2Ci8boM9TQ19DAoGY-yhCbt07XGzm",
   "drive_folder_url": "https://drive.google.com/drive/folders/1Cne2Ci8boM9TQ19DAoGY-yhCbt07XGzm",
-  "total_movies": 0,
+  "total_movies": 1,
   "status": "ONLINE",
   "last_sync": "2026-07-31T21:00:00Z",
-  "movies": []
+  "movies": [
+    {
+      "id": "1BSL7vK9gy6t3MNo6tJN-npI9nghaFBvl",
+      "title": "Como Mágica 2026",
+      "original_filename": "Como Mágica 2026 WEB-DL 1080p x264 DUAL 5.1.mkv",
+      "drive_folder_id": "1Cne2Ci8boM9TQ19DAoGY-yhCbt07XGzm",
+      "stream_url": "https://drive.google.com/uc?export=download&id=1BSL7vK9gy6t3MNo6tJN-npI9nghaFBvl",
+      "embed_url": "https://drive.google.com/file/d/1BSL7vK9gy6t3MNo6tJN-npI9nghaFBvl/preview",
+      "poster": "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=600&auto=format&fit=crop",
+      "backdrop": "https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=1200&auto=format&fit=crop",
+      "rating": 8.8,
+      "year": 2024,
+      "quality": "4K ULTRA HD",
+      "type": "MOVIE"
+    }
+  ]
 }

@@ -69,10 +69,13 @@ def fetch_folder_contents(folder_id=DEFAULT_FOLDER_ID):
             print("==========================================================================\n")
             return []
 
-        # Expressões para capturar pares (ID do arquivo, Nome) do HTML renderizado do Drive
-        matches = re.findall(r'\[\"([a-zA-Z0-9_-]{25,50})\",\[\"(.*?)\"\]', html)
+        # Expressões para capturar pares (Nome, ID) do HTML renderizado do Drive
+        raw_matches = re.findall(r'aria-label=\"([^\"]*?\.(?:mp4|mkv|avi|mov|wmv|webm|m4v))[^\"]*\".*?data-id=\"([a-zA-Z0-9_-]{25,50})\"', html, re.DOTALL | re.IGNORECASE)
+        matches = [(file_id, name) for name, file_id in raw_matches]
+
         if not matches:
-            # Fallback regex para buscar IDs e nomes no HTML do Drive
+            matches = re.findall(r'\[\"([a-zA-Z0-9_-]{25,50})\",\[\"(.*?)\"\]', html)
+        if not matches:
             raw_files = re.findall(r'\"([a-zA-Z0-9_-]{25,50})\".*?\"([^\"]+\.(?:mp4|mkv|avi|mov|wmv|webm|m4v))\"', html, re.IGNORECASE)
             matches = raw_files
 
@@ -85,11 +88,7 @@ def fetch_folder_contents(folder_id=DEFAULT_FOLDER_ID):
             if file_id in seen_ids or file_id == folder_id:
                 continue
                 
-            # Decodifica caracteres escapados unicode
-            try:
-                name_clean = raw_name.encode('utf-8').decode('unicode_escape')
-            except Exception:
-                name_clean = raw_name
+            name_clean = raw_name
                 
             if any(name_clean.lower().endswith(ext) for ext in video_extensions) or 'filme' in name_clean.lower():
                 seen_ids.add(file_id)
