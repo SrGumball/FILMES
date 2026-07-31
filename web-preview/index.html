@@ -649,7 +649,7 @@
         <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;" onclick="testApiConnection()">Conectar</button>
         <span style="color: rgba(255,255,255,0.3);">|</span>
         <span style="color: #4ade80; font-weight: bold; font-size: 11px;">📁 Google Drive: Conectado</span>
-        <button class="btn btn-primary" style="padding: 4px 10px; font-size: 11px; background: #2563eb;" onclick="openDriveModal()">🔄 Gerenciar Pasta / Filmes</button>
+        <button id="btnDriveManager" class="btn btn-primary" style="padding: 4px 10px; font-size: 11px; background: #2563eb;" onclick="openDriveModal()">🔄 Gerenciar Pasta / Filmes</button>
     </div>
 
     <div class="tv-container">
@@ -885,8 +885,10 @@
                 <button class="player-icon-btn" onclick="togglePlayPause()">⏯</button>
                 <button class="player-icon-btn">⏭</button>
                 <button class="player-icon-btn" title="Legendas">💬</button>
-                <button class="player-icon-btn" title="Áudio">🔊</button>
             </div>
+        </div>
+    </div>
+
     <!-- Google Drive Management Modal -->
     <div class="details-modal" id="driveModal" style="z-index: 400;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;">
@@ -1067,11 +1069,19 @@
         }
 
         function openDriveModal() {
-            document.getElementById('driveModal').classList.add('active');
+            const modal = document.getElementById('driveModal');
+            if (modal) {
+                modal.style.display = 'flex';
+                modal.classList.add('active');
+            }
         }
 
         function closeDriveModal() {
-            document.getElementById('driveModal').classList.remove('active');
+            const modal = document.getElementById('driveModal');
+            if (modal) {
+                modal.style.display = 'none';
+                modal.classList.remove('active');
+            }
         }
 
         function submitCustomMovie() {
