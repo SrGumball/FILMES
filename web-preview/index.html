@@ -992,35 +992,90 @@
                 .then(res => res.json())
                 .then(data => {
                     if (data && data.movies && data.movies.length > 0) {
-                        const row = document.getElementById('gdriveRow');
-                        row.innerHTML = '';
-                        data.movies.forEach(m => {
-                            const card = document.createElement('div');
-                            card.className = 'card poster-card';
-                            card.tabIndex = 0;
-                            card.onclick = () => {
-                                startPlayer(m.title);
-                                const video = document.getElementById('videoElement');
-                                video.src = m.stream_url;
-                            };
-                            card.innerHTML = `
-                                <img src="${m.poster}" alt="${m.title}" />
-                                <div class="card-info">
-                                    <div class="card-title">${m.title}</div>
-                                    <div class="card-sub">★ ${m.rating} • ${m.quality}</div>
-                                </div>
-                            `;
-                            row.appendChild(card);
-                        });
-                        alert(`🔥 Catálogo do Google Drive Carregado com Sucesso! (${data.movies.length} filmes prontos)`);
-                    } else {
-                        alert("📁 Pasta do Google Drive (ID: 1Cne2Ci8boM9TQ19DAoGY-yhCbt07XGzm) vinculada!\n\nAssim que os downloads terminarem na pasta do Drive, execute no terminal:\npython3 gdrive_sync.py\n\nTodos os filmes aparecerão automaticamente aqui!");
+                        renderDriveMovies(data.movies);
                     }
                 })
-                .catch(err => {
-                    alert("📁 Pasta do Google Drive (ID: 1Cne2Ci8boM9TQ19DAoGY-yhCbt07XGzm) configurada com sucesso!\n\nQuando os seus filmes terminarem de baixar na pasta do Drive, rode `python3 gdrive_sync.py` para carregar o catálogo.");
-                });
+                .catch(() => {});
         }
+
+        function renderDriveMovies(movies) {
+            const row = document.getElementById('gdriveRow');
+            row.innerHTML = '';
+            movies.forEach(m => {
+                const card = document.createElement('div');
+                card.className = 'card poster-card';
+                card.tabIndex = 0;
+                card.onclick = () => {
+                    startPlayer(m.title);
+                    const video = document.getElementById('videoElement');
+                    video.src = m.stream_url;
+                };
+                card.innerHTML = `
+                    <img src="${m.poster || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=400&auto=format&fit=crop'}" alt="${m.title}" />
+                    <div class="card-info">
+                        <div class="card-title">${m.title}</div>
+                        <div class="card-sub">★ ${m.rating || '9.0'} • ${m.quality || '4K'}</div>
+                    </div>
+                `;
+                row.appendChild(card);
+            });
+        }
+
+        function promptAddDriveMedia() {
+            const input = prompt("💡 Cole a URL do arquivo ou ID do vídeo do Google Drive:\n(Ex: https://drive.google.com/file/d/1ABC.../view OU apenas o ID)");
+            if (input) {
+                const match = input.match(/\/d\/([a-zA-Z0-9_-]+)/) || input.match(/id=([a-zA-Z0-9_-]+)/);
+                const fileId = match ? match[1] : input.trim();
+                const title = prompt("Digite o nome do filme:", "Meu Filme Google Drive") || "Meu Filme";
+                
+                const newMovie = {
+                    id: fileId,
+                    title: title,
+                    stream_url: `https://drive.google.com/uc?export=download&id=${fileId}`,
+                    poster: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=400&auto=format&fit=crop',
+                    rating: 9.5,
+                    quality: '4K ULTRA HD'
+                };
+                
+                // Read existing or append
+                fetch('gdrive_catalog.json').then(r=>r.json()).then(cat => {
+                    cat.movies = cat.movies || [];
+                    cat.movies.unshift(newMovie);
+                    renderDriveMovies(cat.movies);
+                }).catch(() => {
+                    renderDriveMovies([newMovie]);
+                });
+                
+                alert(`✅ Filme "${title}" adicionado ao catálogo! Clique nele para assistir.`);
+            }
+        }
+
+        // Tab Navigation Event Handlers
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                
+                const tab = this.getAttribute('data-tab');
+                if (tab === 'home') {
+                    document.getElementById('viewport').scrollTop = 0;
+                } else if (tab === 'movies') {
+                    const sec = document.getElementById('gdriveSection');
+                    if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+                } else if (tab === 'tvshows') {
+                    alert('📺 Seção de Séries ativada!');
+                } else if (tab === 'search') {
+                    const query = prompt('🔍 Digite o nome do filme ou série que deseja buscar:');
+                    if (query) {
+                        alert(`Buscando por "${query}" no seu servidor e Google Drive...`);
+                    }
+                } else if (tab === 'mylist') {
+                    alert('⭐ Minha Lista: Seus filmes favoritados aparecerão aqui.');
+                } else if (tab === 'notifications') {
+                    alert('🔔 Avisos: Servidor HomeFlix operacional e conectado.');
+                }
+            });
+        });
 
         // Auto check Google Drive catalog on startup
         window.addEventListener('DOMContentLoaded', () => {

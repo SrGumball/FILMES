@@ -59,9 +59,23 @@ def fetch_folder_contents(folder_id=DEFAULT_FOLDER_ID):
         )
         html = urllib.request.urlopen(req).read().decode('utf-8', errors='ignore')
         
+        if "<title>Google Drive: login</title>" in html or "accounts.google.com" in html and len(html) < 200000:
+            print("\n⚠️ AVISO IMPORTANTE: A sua pasta do Google Drive está marcada como PRIVADA!")
+            print("==========================================================================")
+            print("Para que os filmes apareçam no aplicativo da TV e no simulador web:")
+            print("1. Abra a pasta no seu navegador: https://drive.google.com/drive/folders/" + folder_id)
+            print("2. Clique no título da pasta -> Compartilhar -> Compartilhar")
+            print("3. Em 'Acesso geral', mude de 'Restrito' para: 'Qualquer pessoa com o link'")
+            print("==========================================================================\n")
+            return []
+
         # Expressões para capturar pares (ID do arquivo, Nome) do HTML renderizado do Drive
         matches = re.findall(r'\[\"([a-zA-Z0-9_-]{25,50})\",\[\"(.*?)\"\]', html)
-        
+        if not matches:
+            # Fallback regex para buscar IDs e nomes no HTML do Drive
+            raw_files = re.findall(r'\"([a-zA-Z0-9_-]{25,50})\".*?\"([^\"]+\.(?:mp4|mkv|avi|mov|wmv|webm|m4v))\"', html, re.IGNORECASE)
+            matches = raw_files
+
         movies = []
         video_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.m4v')
         
