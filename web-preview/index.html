@@ -648,8 +648,8 @@
         <input type="text" id="apiHostInput" value="http://192.168.0.109:8252/api/" />
         <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;" onclick="testApiConnection()">Conectar</button>
         <span style="color: rgba(255,255,255,0.3);">|</span>
-        <span style="color: #4ade80; font-weight: bold; font-size: 11px;">📁 Google Drive: 1Cne2Ci...</span>
-        <button class="btn btn-primary" style="padding: 4px 10px; font-size: 11px; background: #2563eb;" onclick="loadGDriveCatalog()">🔄 Carregar Pasta</button>
+        <span style="color: #4ade80; font-weight: bold; font-size: 11px;">📁 Google Drive: Conectado</span>
+        <button class="btn btn-primary" style="padding: 4px 10px; font-size: 11px; background: #2563eb;" onclick="openDriveModal()">🔄 Gerenciar Pasta / Filmes</button>
     </div>
 
     <div class="tv-container">
@@ -887,6 +887,51 @@
                 <button class="player-icon-btn" title="Legendas">💬</button>
                 <button class="player-icon-btn" title="Áudio">🔊</button>
             </div>
+    <!-- Google Drive Management Modal -->
+    <div class="details-modal" id="driveModal" style="z-index: 400;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;">
+            <h2 style="font-size: 28px; font-weight: 900; color: #FFF; display: flex; align-items: center; gap: 10px;">
+                📁 Gerenciador de Mídia Google Drive
+            </h2>
+            <button class="btn btn-secondary" onclick="closeDriveModal()">✕ Fechar (ESC)</button>
+        </div>
+
+        <div style="max-width: 700px; display: flex; flex-direction: column; gap: 20px;">
+            <div style="background: rgba(255,255,255,0.05); padding: 16px; border-radius: 10px; border-left: 4px solid #2563eb;">
+                <h4 style="font-size: 15px; font-weight: 700; color: #4ade80; margin-bottom: 6px;">📂 Pasta Conectada no Drive:</h4>
+                <div style="font-family: monospace; font-size: 13px; color: #DDD;">ID: 1Cne2Ci8boM9TQ19DAoGY-yhCbt07XGzm</div>
+                <div style="font-size: 12px; color: #AAA; margin-top: 6px;">
+                    Dica: Certifique-se de que a sua pasta no Google Drive esteja com acesso em <b>"Qualquer pessoa com o link"</b>.
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+                <h3 style="font-size: 18px; font-weight: 800; color: #FFF;">➕ Adicionar Filme/Vídeo ao Catálogo</h3>
+                
+                <div>
+                    <label style="display: block; font-size: 13px; color: #AAA; margin-bottom: 4px;">Nome / Título do Filme:</label>
+                    <input type="text" id="customMovieTitle" placeholder="Ex: Interstellar, O Poderoso Chefão..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #111; color: #FFF; font-size: 14px;" />
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 13px; color: #AAA; margin-bottom: 4px;">Link ou ID do Arquivo no Google Drive:</label>
+                    <input type="text" id="customMovieUrl" placeholder="Ex: https://drive.google.com/file/d/1ABC.../view OU apenas o ID" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #111; color: #FFF; font-size: 14px;" />
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 13px; color: #AAA; margin-bottom: 4px;">URL da Imagem / Pôster (Opcional):</label>
+                    <input type="text" id="customMoviePoster" placeholder="https://..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #111; color: #FFF; font-size: 14px;" />
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 10px;">
+                    <button class="btn btn-primary" onclick="submitCustomMovie()" style="flex: 1; justify-content: center; background: #2563eb;">
+                        ▶ Adicionar Filme & Assistir
+                    </button>
+                    <button class="btn btn-secondary" onclick="loadGDriveCatalog()" style="justify-content: center;">
+                        🔄 Re-Sincronizar Pasta
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1021,33 +1066,41 @@
             });
         }
 
-        function promptAddDriveMedia() {
-            const input = prompt("💡 Cole a URL do arquivo ou ID do vídeo do Google Drive:\n(Ex: https://drive.google.com/file/d/1ABC.../view OU apenas o ID)");
-            if (input) {
-                const match = input.match(/\/d\/([a-zA-Z0-9_-]+)/) || input.match(/id=([a-zA-Z0-9_-]+)/);
-                const fileId = match ? match[1] : input.trim();
-                const title = prompt("Digite o nome do filme:", "Meu Filme Google Drive") || "Meu Filme";
-                
-                const newMovie = {
-                    id: fileId,
-                    title: title,
-                    stream_url: `https://drive.google.com/uc?export=download&id=${fileId}`,
-                    poster: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=400&auto=format&fit=crop',
-                    rating: 9.5,
-                    quality: '4K ULTRA HD'
-                };
-                
-                // Read existing or append
-                fetch('gdrive_catalog.json').then(r=>r.json()).then(cat => {
-                    cat.movies = cat.movies || [];
-                    cat.movies.unshift(newMovie);
-                    renderDriveMovies(cat.movies);
-                }).catch(() => {
-                    renderDriveMovies([newMovie]);
-                });
-                
-                alert(`✅ Filme "${title}" adicionado ao catálogo! Clique nele para assistir.`);
+        function openDriveModal() {
+            document.getElementById('driveModal').classList.add('active');
+        }
+
+        function closeDriveModal() {
+            document.getElementById('driveModal').classList.remove('active');
+        }
+
+        function submitCustomMovie() {
+            const titleInput = document.getElementById('customMovieTitle').value.trim();
+            const urlInput = document.getElementById('customMovieUrl').value.trim();
+            const posterInput = document.getElementById('customMoviePoster').value.trim();
+
+            if (!urlInput) {
+                alert('Por favor, informe a URL ou ID do arquivo do Google Drive.');
+                return;
             }
+
+            const match = urlInput.match(/\/d\/([a-zA-Z0-9_-]+)/) || urlInput.match(/id=([a-zA-Z0-9_-]+)/);
+            const fileId = match ? match[1] : urlInput;
+            const title = titleInput || 'Novo Filme do Drive';
+            const poster = posterInput || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=400&auto=format&fit=crop';
+
+            const newMovie = {
+                id: fileId,
+                title: title,
+                stream_url: `https://drive.google.com/uc?export=download&id=${fileId}`,
+                poster: poster,
+                rating: 9.5,
+                quality: '4K ULTRA HD'
+            };
+
+            renderDriveMovies([newMovie]);
+            closeDriveModal();
+            alert(`✅ Filme "${title}" adicionado ao simulador com sucesso!\nClique no card dele para reproduzir.`);
         }
 
         // Tab Navigation Event Handlers
