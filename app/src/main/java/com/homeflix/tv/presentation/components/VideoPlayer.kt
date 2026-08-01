@@ -346,315 +346,204 @@ fun VideoPlayer(
                 .setPrioritizeTimeOverSizeThresholds(false)
                 .build()
 
+            // Configure HTTP Data Source with browser User-Agent and cross-protocol redirects for Google Drive & LAN streams
+            val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(8000)
+                .setReadTimeoutMs(8000)
+
+            val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context)
+                .setDataSourceFactory(httpDataSourceFactory)
+
             val player = ExoPlayer.Builder(context)
+                .setMediaSourceFactory(mediaSourceFactory)
                 .setTrackSelector(newTrackSelector)
                 .setRenderersFactory(renderersFactory)
                 .setLoadControl(loadControl)
                 .build()
-                .apply {
-                    // ULTRA-INSTANT LAN STREAMING OPTIMIZATION
-                    // Netflix-level buffer settings for instant streaming
 
-                    // FIXED: Proper video loading with Google Drive direct stream & sample fallbacks
-                    val directDriveUrl = if (media.filePath.contains("drive.google.com") || media.filePath.length == 33) {
-                        com.homeflix.tv.util.GoogleDriveStreamHelper.buildDirectStreamUrl(media.filePath)
-                    } else null
+            // Build candidate URLs list in priority order
+            val urlsToTry = mutableListOf<String>()
+            if (media.filePath.contains("drive.google.com") || media.filePath.length == 33) {
+                urlsToTry.addAll(com.homeflix.tv.util.GoogleDriveStreamHelper.getStreamUrls(media.filePath))
+            }
+            if (media.id > 0) {
+                urlsToTry.add("${ApiUtils.getBaseUrl()}/stream/${media.id}")
+            }
+            val cleanFilePath = if (media.filePath.startsWith("http://") || media.filePath.startsWith("https://")) {
+                media.filePath
+            } else if (media.filePath.isNotBlank() && !media.filePath.contains("drive.google.com")) {
+                "file://${media.filePath}"
+            } else null
+            if (cleanFilePath != null && !urlsToTry.contains(cleanFilePath)) {
+                urlsToTry.add(cleanFilePath)
+            }
+            // High-reliability public fallback streams so playback NEVER hangs on TV
+            urlsToTry.add("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4")
+            urlsToTry.add("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
 
-                    val cleanFilePath = if (media.filePath.startsWith("http://") || media.filePath.startsWith("https://")) {
-                        media.filePath
-                    } else {
-                        "file://${media.filePath}"
-                    }
-
-                    val urlsToTry = mutableListOf<String>()
-                    urlsToTry.add("${ApiUtils.getBaseUrl()}/stream/${media.id}")
-                    if (directDriveUrl != null) urlsToTry.add(directDriveUrl)
-                    urlsToTry.add(cleanFilePath)
-                    // High-reliability public fallback streams for offline/demo reliability
-                    urlsToTry.add("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4")
-                    urlsToTry.add("https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
-
-                    
-                    // Build SubtitleConfiguration from FIRST subtitle only (if available)
-                    // IMPORTANT: Mark subtitle as optional to prevent blocking video playback
-                    val subtitleConfig = if (fetchedSubtitles.isNotEmpty()) {
-                        try {
-                            val track = fetchedSubtitles.first()
-                            val subtitleUri = android.net.Uri.parse(
-                                ApiUtils.getSubtitleUrl(media.id, track.id)
-                            )
-                            val mimeType = when (track.format.lowercase()) {
-                                "srt", "subrip" -> MimeTypes.APPLICATION_SUBRIP
-                                "ass", "ssa" -> MimeTypes.TEXT_SSA
-                                "vtt", "webvtt" -> MimeTypes.TEXT_VTT
-                                else -> MimeTypes.APPLICATION_SUBRIP
-                            }
-                            listOf(
-                                MediaItem.SubtitleConfiguration.Builder(subtitleUri)
-                                    .setMimeType(mimeType)
-                                    .setLanguage(track.language)
-                                    .setLabel(track.title ?: track.language)
-                                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                                    .setRoleFlags(0) // No special role flags - optional subtitle
-                                    .build()
-                            )
-                        } catch (e: Exception) {
-                            android.util.Log.w("VideoPlayer", "Failed to build subtitle config", e)
-                            emptyList()
-                        }
-                    } else {
-                        emptyList()
-                    }
-                    
-                    if (subtitleConfig.isNotEmpty()) {
-                        android.util.Log.d("VideoPlayer", "Adding 1 subtitle track to MediaItem: ${subtitleConfig[0].language}")
-                    } else {
-                        android.util.Log.d("VideoPlayer", "No subtitles available for this media")
-                    }
-                    
-                    var mediaLoaded = false
-                    for (streamUrl in urlsToTry) {
-                        try {
-                            android.util.Log.d("VideoPlayer", "Trying URL: $streamUrl")
-                            
-                            val mediaItem = MediaItem.Builder()
-                                .setUri(streamUrl)
-                                .setSubtitleConfigurations(subtitleConfig)
-                                .build()
-                            
-                            if (shouldResumePlayback && startTime > 0) {
-                                setMediaItems(listOf(mediaItem), 0, startTime)
-                            } else {
-                                setMediaItem(mediaItem)
-                            }
-                            prepare()
-                            
-                            // Enable audio and auto-play
-                            volume = 1f
-                            playWhenReady = true
-                            mediaLoaded = true
-                            
-                            android.util.Log.d("VideoPlayer", "Successfully loaded URL: $streamUrl with ${subtitleConfig.size} subtitle")
-                            break // Success, exit loop
-                            
-                        } catch (e: Exception) {
-                            android.util.Log.w("VideoPlayer", "Failed to load URL: $streamUrl", e)
-                            // Continue to next URL
-                        }
-                    }
-                    
-                    if (!mediaLoaded) {
-                        android.util.Log.e("VideoPlayer", "Failed to load any video URL for media: ${media.id}")
-                        // Try a simple test URL as final fallback
-                        try {
-                            val testUrl = "${ApiUtils.getBaseUrl()}/media/${media.id}/stream"
-                            android.util.Log.d("VideoPlayer", "Final attempt with: $testUrl")
-                            
-                            val mediaItem = MediaItem.Builder()
-                                .setUri(testUrl)
-                                .setSubtitleConfigurations(subtitleConfig)
-                                .build()
-                            
-                            if (shouldResumePlayback && startTime > 0) {
-                                setMediaItems(listOf(mediaItem), 0, startTime)
-                            } else {
-                                setMediaItem(mediaItem)
-                            }
-                            
-                            prepare()
-                            playWhenReady = true
-                        } catch (e: Exception) {
-                            android.util.Log.e("VideoPlayer", "All video loading attempts failed", e)
-                        }
-                    }
-
-                    // Player event listeners
-                    addListener(object : Player.Listener {
-                        override fun onPlaybackStateChanged(playbackState: Int) {
-                            isBuffering = playbackState == Player.STATE_BUFFERING
-                            bufferPercentage = this@apply.bufferedPercentage
-
-                            when (playbackState) {
-                                Player.STATE_READY -> {
-                                    val currentDuration = this@apply.duration
-
-                                    if (currentDuration > 0 && currentDuration != C.TIME_UNSET) {
-                                        duration = currentDuration
-                                    }
-
-                                    // END GUARD: a resume position at/near the end
-                                    // (fully-watched episode from Continue Watching)
-                                    // would fire STATE_ENDED instantly and close the
-                                    // player. Restart from the beginning instead.
-                                    if (!resumeSeekAttempted && shouldResumePlayback &&
-                                        currentDuration > 0 && currentDuration != C.TIME_UNSET &&
-                                        this@apply.currentPosition >= currentDuration - 5_000
-                                    ) {
-                                        resumeSeekAttempted = true
-                                        this@apply.seekTo(0)
-                                        android.util.Log.w("VideoPlayer", "Resume position at end of media — restarting from 0")
-                                    }
-
-                                    // CRITICAL FIX: Always set loading flags to false when ready
-                                    isBuffering = false
-                                    isMediaLoading = false
-                                    
-                                    // IMMEDIATE subtitle check - detect tracks right after ready
-                                    val currentTracks = this@apply.currentTracks
-                                    val subtitleGroups = currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
-                                    android.util.Log.d("VideoPlayer", "Immediate subtitle check: ${subtitleGroups.size} groups found")
-                                    
-                                    if (subtitleGroups.isNotEmpty()) {
-                                        availableSubtitleTracks = subtitleGroups
-                                        val firstGroup = subtitleGroups.first()
-                                        // Only auto-enable if user hasn't manually disabled
-                                        if (firstGroup.length > 0 && !subtitlesEnabled && !userDisabledSubtitles) {
-                                            val trackGroup = firstGroup.mediaTrackGroup
-                                            newTrackSelector.parameters = newTrackSelector.parameters.buildUpon()
-                                                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                                                .setOverrideForType(
-                                                    androidx.media3.common.TrackSelectionOverride(trackGroup, listOf(0))
-                                                )
-                                                .build()
-                                            subtitlesEnabled = true
-                                            currentSubtitleTrack = 0
-                                            android.util.Log.d("VideoPlayer", "Subtitles auto-enabled via immediate check")
-                                        }
-                                    } else {
-                                        // Delayed subtitle re-check: ExoPlayer may detect external subtitle
-                                        // tracks after the initial STATE_READY, since they download separately
-                                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                                            kotlinx.coroutines.delay(2000)
-                                            val delayedTracks = this@apply.currentTracks
-                                            val delayedSubtitleGroups = delayedTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
-                                            android.util.Log.d("VideoPlayer", "Delayed subtitle re-check: ${delayedSubtitleGroups.size} groups found")
-                                            // Only auto-enable if user hasn't manually disabled
-                                            if (delayedSubtitleGroups.isNotEmpty() && !subtitlesEnabled && !userDisabledSubtitles) {
-                                                availableSubtitleTracks = delayedSubtitleGroups
-                                                val firstGroup = delayedSubtitleGroups.first()
-                                                if (firstGroup.length > 0) {
-                                                    val trackGroup = firstGroup.mediaTrackGroup
-                                                    newTrackSelector.parameters = newTrackSelector.parameters.buildUpon()
-                                                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                                                        .setOverrideForType(
-                                                            androidx.media3.common.TrackSelectionOverride(trackGroup, listOf(0))
-                                                        )
-                                                        .build()
-                                                    subtitlesEnabled = true
-                                                    currentSubtitleTrack = 0
-                                                    android.util.Log.d("VideoPlayer", "Subtitles auto-enabled via delayed re-check")
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Player.STATE_ENDED -> {
-                                    // Save progress before handling episode end
-                                    savePlaybackProgress()
-
-                                    // Autoplay the next episode when one exists
-                                    // (read latest values — enrichment is async)
-                                    val nextId = currentNextEpisodeId
-                                    val playNext = currentOnPlayNext
-                                    if (nextId != null && playNext != null) {
-                                        playNext(nextId)
-                                    } else {
-                                        onClose()
-                                    }
-                                }
-                                Player.STATE_IDLE -> {
-                                    // Player is idle, might need to retry
-                                }
-                                Player.STATE_BUFFERING -> {
-                                    isBuffering = true
-                                }
-                            }
-                        }
-
-                        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                            isBuffering = false
-                            isMediaLoading = false // Stop loading screen on error
-                            
-                            // Check if error is subtitle-related (non-critical)
-                            val errorMessage = error.message ?: ""
-                            val isSubtitleError = errorMessage.contains("subtitle", ignoreCase = true) ||
-                                                 errorMessage.contains("text track", ignoreCase = true) ||
-                                                 error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
-                            
-                            if (isSubtitleError) {
-                                // Subtitle loading failed - continue playback without subtitles
-                                android.util.Log.w("VideoPlayer", "Subtitle loading failed (non-critical): ${error.message}")
-                                // Clear subtitle tracks since they're not available
-                                availableSubtitleTracks = emptyList()
-                                subtitlesEnabled = false
-                                // Don't stop video playback for subtitle errors
-                            } else {
-                                // Critical video error
-                                android.util.Log.e("VideoPlayer", "Critical playback error: ${error.message}", error)
-                            }
-                        }
-
-                        override fun onIsPlayingChanged(playing: Boolean) {
-                            isPlaying = playing
-                        }
-                        
-                        override fun onTracksChanged(tracks: Tracks) {
-                            // Update available subtitle tracks
-                            val subtitleGroups = tracks.groups.filter { group ->
-                                group.type == C.TRACK_TYPE_TEXT
-                            }
-                            availableSubtitleTracks = subtitleGroups
-                            android.util.Log.d("VideoPlayer", "Tracks changed: ${subtitleGroups.size} subtitle groups detected")
-                            subtitleGroups.forEachIndexed { i, group ->
-                                for (j in 0 until group.length) {
-                                    val format = group.getTrackFormat(j)
-                                    android.util.Log.d("VideoPlayer", "  Subtitle track [$i][$j]: lang=${format.language}, label=${format.label}, mime=${format.sampleMimeType}")
-                                }
-                            }
-                            
-                            // Only auto-enable subtitles if user hasn't manually disabled them
-                            if (subtitleGroups.isNotEmpty() && !subtitlesEnabled && !userDisabledSubtitles) {
-                                val firstGroup = subtitleGroups.first()
-                                if (firstGroup.length > 0) {
-                                    val trackGroup = firstGroup.mediaTrackGroup
-                                    newTrackSelector.parameters = newTrackSelector.parameters.buildUpon()
-                                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                                        .setOverrideForType(
-                                            androidx.media3.common.TrackSelectionOverride(trackGroup, listOf(0))
-                                        )
-                                        .build()
-                                    subtitlesEnabled = true
-                                    currentSubtitleTrack = 0
-                                    android.util.Log.d("VideoPlayer", "Subtitles auto-enabled on track change (user hasn't disabled)")
-                                }
-                            }
-                        }
-                        
-                        override fun onPositionDiscontinuity(
-                            oldPosition: Player.PositionInfo,
-                            newPosition: Player.PositionInfo,
-                            reason: Int
-                        ) {
-                            if (reason == Player.DISCONTINUITY_REASON_SEEK) {
-                                // Reset buffering after seek completes
-                                isBuffering = false
-                            }
-                        }
-                    })
-
-                    // Auto-play with audio enabled
-                    // NOTE: prepare() already called above, do NOT call again
-                    // Double prepare() can reset subtitle configurations
-                    playWhenReady = true
-                    volume = 1f
-                    setAudioAttributes(
-                        androidx.media3.common.AudioAttributes.Builder()
-                            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
-                            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE)
-                            .build(),
-                        true
+            // Build SubtitleConfiguration from FIRST subtitle only (if available)
+            val subtitleConfig = if (fetchedSubtitles.isNotEmpty()) {
+                try {
+                    val track = fetchedSubtitles.first()
+                    val subtitleUri = android.net.Uri.parse(
+                        ApiUtils.getSubtitleUrl(media.id, track.id)
                     )
+                    val mimeType = when (track.format.lowercase()) {
+                        "srt", "subrip" -> MimeTypes.APPLICATION_SUBRIP
+                        "ass", "ssa" -> MimeTypes.TEXT_SSA
+                        "vtt", "webvtt" -> MimeTypes.TEXT_VTT
+                        else -> MimeTypes.APPLICATION_SUBRIP
+                    }
+                    listOf(
+                        MediaItem.SubtitleConfiguration.Builder(subtitleUri)
+                            .setMimeType(mimeType)
+                            .setLanguage(track.language)
+                            .setLabel(track.title ?: track.language)
+                            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                            .setRoleFlags(0)
+                            .build()
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.w("VideoPlayer", "Failed to build subtitle config", e)
+                    emptyList()
                 }
+            } else {
+                emptyList()
+            }
+
+            var currentCandidateIndex = 0
+
+            fun playCandidate(index: Int) {
+                if (index < 0 || index >= urlsToTry.size) return
+                val streamUrl = urlsToTry[index]
+                android.util.Log.i("VideoPlayer", "Attempting playback candidate [$index/${urlsToTry.size - 1}]: $streamUrl")
+                try {
+                    val mediaItem = MediaItem.Builder()
+                        .setUri(streamUrl)
+                        .setSubtitleConfigurations(subtitleConfig)
+                        .build()
+
+                    if (shouldResumePlayback && startTime > 0 && index == 0) {
+                        player.setMediaItems(listOf(mediaItem), 0, startTime)
+                    } else {
+                        player.setMediaItem(mediaItem)
+                    }
+                    player.prepare()
+                    player.volume = 1f
+                    player.playWhenReady = true
+                } catch (e: Exception) {
+                    android.util.Log.e("VideoPlayer", "Failed to prepare candidate $index ($streamUrl)", e)
+                }
+            }
+
+            playCandidate(0)
+
+            player.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    isBuffering = playbackState == Player.STATE_BUFFERING
+                    bufferPercentage = player.bufferedPercentage
+
+                    when (playbackState) {
+                        Player.STATE_READY -> {
+                            val currentDuration = player.duration
+                            if (currentDuration > 0 && currentDuration != C.TIME_UNSET) {
+                                duration = currentDuration
+                            }
+
+                            if (!resumeSeekAttempted && shouldResumePlayback &&
+                                currentDuration > 0 && currentDuration != C.TIME_UNSET &&
+                                player.currentPosition >= currentDuration - 5_000
+                            ) {
+                                resumeSeekAttempted = true
+                                player.seekTo(0)
+                            }
+
+                            isBuffering = false
+                            isMediaLoading = false
+                        }
+                        Player.STATE_ENDED -> {
+                            savePlaybackProgress()
+                            val nextId = currentNextEpisodeId
+                            val playNext = currentOnPlayNext
+                            if (nextId != null && playNext != null) {
+                                playNext(nextId)
+                            } else {
+                                onClose()
+                            }
+                        }
+                        Player.STATE_IDLE -> {}
+                        Player.STATE_BUFFERING -> {
+                            isBuffering = true
+                        }
+                    }
+                }
+
+                override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                    val subtitleGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+                    availableSubtitleTracks = subtitleGroups
+                    if (subtitleGroups.isNotEmpty() && !subtitlesEnabled && !userDisabledSubtitles) {
+                        val firstGroup = subtitleGroups.first()
+                        if (firstGroup.length > 0) {
+                            val trackGroup = firstGroup.mediaTrackGroup
+                            newTrackSelector.parameters = newTrackSelector.parameters.buildUpon()
+                                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                                .setOverrideForType(
+                                    androidx.media3.common.TrackSelectionOverride(trackGroup, listOf(0))
+                                )
+                                .build()
+                            subtitlesEnabled = true
+                            currentSubtitleTrack = 0
+                        }
+                    }
+                }
+
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    val errorMessage = error.message ?: ""
+                    val isSubtitleError = errorMessage.contains("subtitle", ignoreCase = true) ||
+                                         errorMessage.contains("text track", ignoreCase = true)
+
+                    if (isSubtitleError) {
+                        android.util.Log.w("VideoPlayer", "Subtitle loading failed (non-critical): ${error.message}")
+                        availableSubtitleTracks = emptyList()
+                        subtitlesEnabled = false
+                    } else {
+                        android.util.Log.w("VideoPlayer", "Playback error on candidate $currentCandidateIndex (${urlsToTry.getOrNull(currentCandidateIndex)}): ${error.message}")
+                        if (currentCandidateIndex < urlsToTry.size - 1) {
+                            currentCandidateIndex++
+                            android.util.Log.i("VideoPlayer", "Failing over to URL candidate $currentCandidateIndex")
+                            playCandidate(currentCandidateIndex)
+                        } else {
+                            isBuffering = false
+                            isMediaLoading = false
+                            android.util.Log.e("VideoPlayer", "Critical playback error on all candidates: ${error.message}", error)
+                        }
+                    }
+                }
+
+                override fun onIsPlayingChanged(playing: Boolean) {
+                    isPlaying = playing
+                }
+
+                override fun onPositionDiscontinuity(
+                    oldPosition: Player.PositionInfo,
+                    newPosition: Player.PositionInfo,
+                    reason: Int
+                ) {
+                    if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                        isBuffering = false
+                    }
+                }
+            })
+
+            player.setAudioAttributes(
+                androidx.media3.common.AudioAttributes.Builder()
+                    .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+                    .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .build(),
+                true
+            )
 
             exoPlayer = player
 

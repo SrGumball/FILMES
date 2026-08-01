@@ -28,11 +28,23 @@ object GoogleDriveStreamHelper {
     }
 
     /**
+     * Retorna a lista completa de URLs de streaming direto do Google Drive para fallback no ExoPlayer.
+     */
+    fun getStreamUrls(urlOrId: String): List<String> {
+        val cleanId = extractDriveId(urlOrId)
+        return listOf(
+            "https://drive.google.com/uc?export=download&confirm=t&id=$cleanId",
+            "https://drive.google.com/uc?export=download&id=$cleanId",
+            "https://docs.google.com/uc?export=download&confirm=t&id=$cleanId",
+            "https://drive.usercontent.google.com/download?id=$cleanId&export=download&confirm=t"
+        )
+    }
+
+    /**
      * Converte o ID de um arquivo do Google Drive em URL de streaming direto para o ExoPlayer.
      */
     fun buildDirectStreamUrl(fileId: String): String {
-        val cleanId = extractDriveId(fileId)
-        return "https://drive.google.com/uc?export=download&id=$cleanId"
+        return getStreamUrls(fileId).first()
     }
 
     /**
