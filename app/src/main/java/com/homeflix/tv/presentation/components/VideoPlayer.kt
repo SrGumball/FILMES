@@ -240,6 +240,15 @@ fun VideoPlayer(
         }
     }
     
+    // SCREEN LOCK GUARD: Prevent Android TV screensaver / sleep mode during video playback
+    DisposableEffect(Unit) {
+        val activity = context as? android.app.Activity
+        activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     // Auto-hide subtitle toast
     LaunchedEffect(showSubtitleToast) {
         if (showSubtitleToast) {
@@ -659,6 +668,7 @@ fun VideoPlayer(
             AndroidView(
                 factory = { context ->
                     PlayerView(context).apply {
+                        keepScreenOn = true
                         useController = false // We'll use custom controls
                         setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER) // Disable built-in buffering indicator
                         // Set background to black to prevent white flash

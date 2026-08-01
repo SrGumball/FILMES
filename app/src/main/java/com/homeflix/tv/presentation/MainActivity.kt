@@ -23,6 +23,9 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Prevent Android TV from entering Ambient/Daydream screensaver or sleep mode while using app
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         setContent {
             // Pin the app's font scale to 1.0 so the TV's system "font size"
             // accessibility setting can't inflate our typography — this keeps
